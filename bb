@@ -52,6 +52,8 @@ plot(long_stop_loss, title="Long Stop Loss", color=color.orange, linewidth=2, st
 plot(short_stop_loss, title="Short Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
 plot(atr, title="ATR", color=color.purple, linewidth=2)
 plot(ma, title="MA", color=color.green, linewidth=2)
+plot(close[1] + (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
+plot(close[1] - (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
 
 // Calculate price action signals
 long_wick_bottom(idx) => low[idx] < lower[idx] and (open[idx] - low[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
@@ -76,3 +78,4 @@ if short_entry
     strategy.order("Short TP", strategy.short, when=close <= (close[1] - (profit_condition * distance)))
 if short_exit
     strategy.close("Short")
+
