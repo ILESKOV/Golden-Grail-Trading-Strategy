@@ -104,5 +104,3 @@ if short_entry_trend
     strategy.order("Short TP Trend", strategy.short, when=close <= (close[1] - (profit_points * distance)))
 if short_exit_trend
     strategy.close("Short Trend")
-
-
