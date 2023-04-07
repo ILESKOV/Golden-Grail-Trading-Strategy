@@ -15,8 +15,9 @@ end_day = input(2, title="End Day", type=input.integer)
 atr_period = input(14, title="ATR Period", type=input.integer)
 atr_threshold = input(0.5, title="ATR Threshold", type=input.float)
 trail_points = input(0.5, title="Trail Points", type=input.float)
-profit_points = input(1.0, title="Profit Points", type=input.float)
+profit_condition = input(1.0, title="Profit Condition", type=input.float)
 ma_period = input(50, title="MA Period", type=input.integer)
+profit_points = input(1.0, title="Profit Points", type=input.float)
 
 start_ts = timestamp(start_year, start_month, start_day, 0, 0)
 end_ts = timestamp(end_year, end_month, end_day, 0, 0)
@@ -63,12 +64,15 @@ short_entry = src[1] >= upper[1] and short_wick_top(1) and within_date_range and
 short_exit = src[1] <= basis[1] and within_date_range
 
 // Strategy orders
-strategy.entry("Long", strategy.long, when=long_entry)
-strategy.exit("Long Stop Loss", "Long", stop=long_stop_loss, when=within_date_range)
-strategy.order("Long TP", strategy.long, profit=profit_points, when=long_entry and within_date_range)
-strategy.close("Long", when=long_exit)
-
-strategy.entry("Short", strategy.short, when=short_entry)
-strategy.exit("Short Stop Loss", "Short", stop=short_stop_loss, when=within_date_range)
-strategy.order("Short TP", strategy.short, profit=profit_points, when=short_entry and within_date_range)
-strategy.close("Short", when=short_exit)
+if long_entry
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Stop Loss", "Long", stop=long_stop_loss)
+    strategy.order("Long TP", strategy.long, when=close >= (close[1] + (profit_condition * distance)))
+if long_exit
+    strategy.close("Long")
+if short_entry
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Stop Loss", "Short", stop=short_stop_loss)
+    strategy.order("Short TP", strategy.short, when=close <= (close[1] - (profit_condition * distance)))
+if short_exit
+    strategy.close("Short")
