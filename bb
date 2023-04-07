@@ -44,13 +44,19 @@ is_high_volatility = atr > atr_threshold
 ma = sma(src, ma_period)
 is_uptrend = close > ma
 
+if atr <= 2
+    is_consolidation_mode = true
+else
+    is_consolidation_mode = false
+
+
 // Plot Bollinger Bands, stop loss levels, ATR, and MA on the chart
 plot(basis, title="Basis", color=color.blue, linewidth=2)
 plot(upper, title="Upper", color=color.red, linewidth=2)
 plot(lower, title="Lower", color=color.red, linewidth=2)
 plot(long_stop_loss, title="Long Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
 plot(short_stop_loss, title="Short Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
-plot(atr, title="ATR", color=color.purple, linewidth=2)
+plot(atr, title="ATR", color=color.rgb(11, 6, 12), linewidth=2)
 plot(ma, title="MA", color=color.green, linewidth=2)
 plot(close[1] + (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
 plot(close[1] - (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
@@ -59,23 +65,44 @@ plot(close[1] - (profit_condition * distance), title="Profit Condition", color=c
 long_wick_bottom(idx) => low[idx] < lower[idx] and (open[idx] - low[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
 short_wick_top(idx) => high[idx] > upper[idx] and (high[idx] - close[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
 
-// Strategy rules
-long_entry = src[1] <= lower[1] and long_wick_bottom(1) and within_date_range and is_high_volatility and is_uptrend
-long_exit = src[1] >= basis[1] and within_date_range
-short_entry = src[1] >= upper[1] and short_wick_top(1) and within_date_range and is_high_volatility and not is_uptrend
-short_exit = src[1] <= basis[1] and within_date_range
+/// Strategy rules for consolidation mode
+long_entry_consolidation = src[1] <= lower[1] and long_wick_bottom(1) and within_date_range and atr <= 2
+long_exit_consolidation = src[1] >= basis[1] and within_date_range
+short_entry_consolidation = src[1] >= upper[1] and short_wick_top(1) and within_date_range and atr <= 2
+short_exit_consolidation = src[1] <= basis[1] and within_date_range
 
-// Strategy orders
-if long_entry
-    strategy.entry("Long", strategy.long)
-    strategy.exit("Long Stop Loss", "Long", stop=long_stop_loss)
-    strategy.order("Long TP", strategy.long, when=close >= (close[1] + (profit_condition * distance)))
-if long_exit
-    strategy.close("Long")
-if short_entry
-    strategy.entry("Short", strategy.short)
-    strategy.exit("Short Stop Loss", "Short", stop=short_stop_loss)
-    strategy.order("Short TP", strategy.short, when=close <= (close[1] - (profit_condition * distance)))
-if short_exit
-    strategy.close("Short")
+// Strategy rules for trend mode
+long_entry_trend = src[1] <= lower[1] and long_wick_bottom(1) and within_date_range and atr > 2 and is_uptrend
+long_exit_trend = src[1] >= basis[1] and within_date_range
+short_entry_trend = src[1] >= upper[1] and short_wick_top(1) and within_date_range and atr > 2 and not is_uptrend
+short_exit_trend = src[1] <= basis[1] and within_date_range
+
+// Strategy orders for consolidation mode
+if long_entry_consolidation
+    strategy.entry("Long Consolidation", strategy.long)
+    strategy.exit("Long Stop Loss Consolidation", "Long Consolidation", stop=long_stop_loss)
+    strategy.order("Long TP Consolidation", strategy.long, when=close >= (close[1] + (profit_condition * distance)))
+if long_exit_consolidation
+    strategy.close("Long Consolidation")
+if short_entry_consolidation
+    strategy.entry("Short Consolidation", strategy.short)
+    strategy.exit("Short Stop Loss Consolidation", "Short Consolidation", stop=short_stop_loss)
+    strategy.order("Short TP Consolidation", strategy.short, when=close <= (close[1] - (profit_condition * distance)))
+if short_exit_consolidation
+    strategy.close("Short Consolidation")
+
+// Strategy orders for trend mode
+if long_entry_trend
+    strategy.entry("Long Trend", strategy.long)
+    strategy.exit("Long Stop Loss Trend", "Long Trend", stop=long_stop_loss)
+    strategy.order("Long TP Trend", strategy.long, when=close >= (close[1] + (profit_points * distance)))
+if long_exit_trend
+    strategy.close("Long Trend")
+if short_entry_trend
+    strategy.entry("Short Trend", strategy.short)
+    strategy.exit("Short Stop Loss Trend", "Short Trend", stop=short_stop_loss)
+    strategy.order("Short TP Trend", strategy.short, when=close <= (close[1] - (profit_points * distance)))
+if short_exit_trend
+    strategy.close("Short Trend")
+
 
