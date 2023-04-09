@@ -1,0 +1,126 @@
+//@version=4
+strategy("Bollinger Bands Strategy with Adjusted Stop Loss, Take Profit, Volatility Filter ,Trend Filter and different modes", shorttitle="BB Cross adj SL TP VF TF", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.02)
+
+// Input parameters
+length = input(20, title="Length", type=input.integer, minval=1)
+src = input(close, title="Source")
+mult = input(2.0, title="Multiplier", type=input.float)
+wick_multiplier = input(1.0, title="Wick Multiplier", type=input.float)
+start_year = input(2023, title="Start Year", type=input.integer)
+start_month = input(4, title="Start Month", type=input.integer)
+start_day = input(1, title="Start Day", type=input.integer)
+end_year = input(2023, title="End Year", type=input.integer)
+end_month = input(4, title="End Month", type=input.integer)
+end_day = input(2, title="End Day", type=input.integer)
+atr_period = input(14, title="ATR Period", type=input.integer)
+atr_threshold = input(0.5, title="ATR Threshold", type=input.float)
+trail_points = input(0.5, title="Trail Points", type=input.float)
+profit_condition = input(1.0, title="Profit Condition", type=input.float)
+ma_period = input(50, title="MA Period", type=input.integer)
+profit_points = input(1.0, title="Profit Points", type=input.float)
+
+start_ts = timestamp(start_year, start_month, start_day, 0, 0)
+end_ts = timestamp(end_year, end_month, end_day, 0, 0)
+
+// Check if the current bar is within the specified date range
+within_date_range = (time >= start_ts) and (time <= end_ts)
+
+// Calculate Bollinger Bands
+basis = sma(src, length)
+dev = mult * stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+
+// Calculate the stop loss level for long and short positions based on the distance
+distance = upper - lower
+long_stop_loss = close - trail_points * distance
+short_stop_loss = close + trail_points * distance
+
+// Calculate ATR to filter out low volatility periods
+atr = atr(atr_period)
+is_high_volatility = atr > atr_threshold
+
+// Calculate the MA to filter out trades against the trend
+ma = sma(src, ma_period)
+is_uptrend = close > ma
+
+if atr <= 2
+    is_consolidation_mode = true
+else
+    is_consolidation_mode = false
+
+
+// Plot Bollinger Bands, stop loss levels, ATR, and MA on the chart
+plot(basis, title="Basis", color=color.blue, linewidth=2)
+plot(upper, title="Upper", color=color.red, linewidth=2)
+plot(lower, title="Lower", color=color.red, linewidth=2)
+plot(long_stop_loss, title="Long Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
+plot(short_stop_loss, title="Short Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
+plot(atr, title="ATR", color=color.rgb(11, 6, 12), linewidth=2)
+plot(ma, title="MA", color=color.green, linewidth=2)
+// plot(close[1] + (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
+// plot(close[1] - (profit_condition * distance), title="Profit Condition", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_line)
+
+// Calculate price action signals
+long_wick_bottom(idx) => low[idx] < lower[idx] and (open[idx] - low[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
+short_wick_top(idx) => high[idx] > upper[idx] and (high[idx] - close[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
+
+// Strategy rules for consolidation mode
+long_entry_consolidation = low[1] <= lower[1] and within_date_range and atr <= 2
+long_exit_consolidation = src[1] >= basis[1] and within_date_range
+short_entry_consolidation = high[1] >= upper[1] and within_date_range and atr <= 2
+short_exit_consolidation = src[1] <= basis[1] and within_date_range
+
+// Strategy rules for trend mode
+long_entry_trend = src[1] <= lower[1] and long_wick_bottom(1) and within_date_range and atr > 2 and is_uptrend
+long_exit_trend = src[1] >= basis[1] and within_date_range
+short_entry_trend = src[1] >= upper[1] and short_wick_top(1) and within_date_range and atr > 2 and not is_uptrend
+short_exit_trend = src[1] <= basis[1] and within_date_range
+
+// Strategy orders for consolidation mode
+if long_entry_consolidation
+    strategy.entry("Long Consolidation", strategy.long)
+    strategy.exit("Long Stop Loss Consolidation", "Long Consolidation", stop=long_stop_loss)
+    strategy.exit("Long Half TP1 Consolidation", "Long Consolidation", qty_percent=50, when=high >= basis, limit=basis)
+    strategy.exit("Long Half TP2 Consolidation", "Long Consolidation", qty_percent=50, when=high >= upper, limit=upper)
+if long_exit_consolidation
+    strategy.close("Long Consolidation")
+if short_entry_consolidation
+    strategy.entry("Short Consolidation", strategy.short)
+    strategy.exit("Short Stop Loss Consolidation", "Short Consolidation", stop=short_stop_loss)
+    strategy.exit("Short Half TP1 Consolidation", "Short Consolidation", qty_percent=50, when=low <= basis, limit=basis)
+    strategy.exit("Short Half TP2 Consolidation", "Short Consolidation", qty_percent=50, when=low <= lower, limit=lower)
+if short_exit_consolidation
+    strategy.close("Short Consolidation")
+
+
+// Identify swing high and swing low points
+lookback = 50
+highestPoint = highest(high, lookback)
+lowestPoint = lowest(low, lookback)
+
+// Calculate the Fibonacci extension levels
+fib_618 = (highestPoint - lowestPoint) * 0.618
+fib_1618 = (highestPoint - lowestPoint) * 1.618
+
+// Calculate the Fibonacci take profit levels
+long_tp = lowestPoint + fib_1618
+short_tp = highestPoint - fib_1618
+
+// Plot the Fibonacci take profit levels
+plot(long_tp, title="Long TP (Fibonacci)", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_stepline)
+plot(short_tp, title="Short TP (Fibonacci)", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_stepline)
+
+// // Strategy orders for trend mode
+// if long_entry_trend
+//     strategy.entry("Long Trend", strategy.long, comment="Trend")
+//     strategy.exit("Long Stop Loss Trend", "Long Trend", stop=long_stop_loss)
+//     strategy.order("Long TP Trend", strategy.long, when=close >= long_tp, limit=long_tp)
+// if long_exit_trend
+//     strategy.close("Long Trend")
+// if short_entry_trend
+//     strategy.entry("Short Trend", strategy.short, comment="Trend")
+//     strategy.exit("Short Stop Loss Trend", "Short Trend", stop=short_stop_loss)
+//     strategy.order("Short TP Trend", strategy.short, when=close <= short_tp, limit=short_tp)
+// if short_exit_trend
+//     strategy.close("Short Trend")
