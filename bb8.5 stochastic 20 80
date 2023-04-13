@@ -1,0 +1,156 @@
+//@version=4
+strategy("Bollinger Bands Strategy with Adjusted Stop Loss, Take Profit, Volatility Filter ,Trend Filter and different modes", shorttitle="BB Cross adj SL TP VF TF", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.02)
+
+// Input parameters
+length = input(20, title="Length", type=input.integer, minval=1)
+src = input(close, title="Source")
+mult = input(2.0, title="Multiplier", type=input.float)
+wick_multiplier = input(1.0, title="Wick Multiplier", type=input.float)
+start_year = input(2023, title="Start Year", type=input.integer)
+start_month = input(4, title="Start Month", type=input.integer)
+start_day = input(9, title="Start Day", type=input.integer)
+end_year = input(2023, title="End Year", type=input.integer)
+end_month = input(4, title="End Month", type=input.integer)
+end_day = input(10, title="End Day", type=input.integer)
+trail_points = input(0.5, title="Trail Points", type=input.float)
+profit_condition = input(1.0, title="Profit Condition", type=input.float)
+ma_period = input(50, title="MA Period", type=input.integer)
+profit_points = input(1.0, title="Profit Points", type=input.float)
+adx_period = input(14, title="ADX Period", type=input.integer)
+adx_threshold = input(25, title="ADX Threshold", type=input.float)
+roc_period = input(10, title="ROC Period", type=input.integer)
+roc_threshold = input(2, title="ROC Threshold", type=input.float)
+// Input parameters for Stochastic Oscillator
+stoch_length = input(14, title="Stochastic Length", type=input.integer)
+stoch_k = input(3, title="Stochastic %K", type=input.integer)
+stoch_d = input(3, title="Stochastic %D", type=input.integer)
+oversold = input(20, title="Oversold Level", type=input.integer)
+overbought = input(80, title="Overbought Level", type=input.integer)
+
+start_ts = timestamp(start_year, start_month, start_day, 0, 0)
+end_ts = timestamp(end_year, end_month, end_day, 0, 0)
+
+within_date_range = (time >= start_ts) and (time <= end_ts)
+
+// ----- ADX Calculation -----
+dip = abs(high - high[1])
+dim = abs(low - low[1])
+true_range = max(max(high - low, dip), dim)
+dmp = dip > dim and dip > true_range ? dip : 0
+dmm = dim > dip and dim > true_range ? dim : 0
+dmpSmoothed = sma(dmp, adx_period)
+dmmSmoothed = sma(dmm, adx_period)
+trSmoothed = sma(true_range, adx_period)
+dipSmoothed = 100 * dmpSmoothed / trSmoothed
+dimSmoothed = 100 * dmmSmoothed / trSmoothed
+dx = abs(dipSmoothed - dimSmoothed) / (dipSmoothed + dimSmoothed) * 100
+adx = sma(dx, adx_period)
+
+// ----- Stochastic Oscillator Calculation ----- 
+stochLine = stoch(high, low, close, stoch_length)
+k = sma(stochLine, stoch_k)
+d = sma(k, stoch_d)
+
+// ----- ROC Calculation -----
+roc = (close - close[roc_period]) / close[roc_period] * 100
+
+is_strong_trend = adx > adx_threshold
+is_consistent_trend = roc > roc_threshold or roc < -roc_threshold
+
+// ----- Bollinger Bands Calculation -----
+basis = sma(src, length)
+dev = mult * stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+
+// ----- Stop Loss Levels Calculation -----
+distance = upper - lower
+long_stop_loss = low - distance
+short_stop_loss = high + distance
+
+// ----- MA Calculation -----
+ma = sma(src, ma_period)
+is_uptrend = close > ma
+
+// ----- Entry and Exit Conditions -----
+longCondition = within_date_range and crossover(src, lower) and is_strong_trend and is_consistent_trend and (k[1] > oversold) and (k < d) and crossunder(d, k) and k > oversold
+
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+
+shortCondition = within_date_range and crossunder(src, upper) and is_strong_trend and is_consistent_trend and (k[1] < overbought) and (k > d) and crossover(d, k) and k < overbought
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+    
+// ----- Plotting -----
+plot(basis, title="Basis", color=color.blue, linewidth=2)
+plot(upper, title="Upper", color=color.red, linewidth=2)
+plot(lower, title="Lower", color=color.red, linewidth=2)
+plot(long_stop_loss, title="Long Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
+plot(short_stop_loss, title="Short Stop Loss", color=color.orange, linewidth=2, style=plot.style_stepline)
+plot(ma, title="MA", color=color.green, linewidth=2)
+plot(adx, title="ADX", color=color.rgb(21, 101, 192), linewidth=2)
+plot(roc, title="ROC", color=color.rgb(233, 30, 99), linewidth=2)
+
+// ----- Price Action Signals Calculation -----
+long_wick_bottom(idx) => low[idx] < lower[idx] and (open[idx] - low[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
+short_wick_top(idx) => high[idx] > upper[idx] and (high[idx] - close[idx]) >= wick_multiplier * abs(close[idx] - open[idx])
+
+// ----- Strategy Rules for Consolidation Mode -----
+long_entry_consolidation = low[0] <= lower[0] and within_date_range and k < oversold and d < oversold and k > oversold
+long_exit_consolidation = src[0] >= basis[0] and within_date_range
+short_entry_consolidation = high[0] >= upper[0] and within_date_range and k > overbought and d > overbought and k < overbought
+short_exit_consolidation = src[0] <= basis[0] and within_date_range
+
+// ----- Entry and Exit Rules for Trend Mode -----
+long_entry_trend = src[1] <= lower[1] and long_wick_bottom(1) and within_date_range and is_strong_trend and is_uptrend and is_consistent_trend
+long_exit_trend = src[1] >= basis[1] and within_date_range
+short_entry_trend = src[1] >= upper[1] and short_wick_top(1) and within_date_range and is_strong_trend and not is_uptrend and is_consistent_trend
+short_exit_trend = src[1] <= basis[1] and within_date_range
+
+// ----- Strategy Orders for Consolidation Mode -----
+if long_entry_consolidation
+    strategy.entry("Long Consolidation", strategy.long)
+    strategy.exit("Long Stop Loss Consolidation", "Long Consolidation", stop=long_stop_loss)
+    strategy.exit("Long TP1 Consolidation", "Long Consolidation", limit=basis, qty_percent=50, comment="Partial TP1")
+    strategy.exit("Long TP2 Consolidation", "Long Consolidation", limit=upper, qty_percent=50, comment="Partial TP2")
+if long_exit_consolidation
+    strategy.close("Long Consolidation")
+if short_entry_consolidation
+    strategy.entry("Short Consolidation", strategy.short)
+    strategy.exit("Short Stop Loss Consolidation", "Short Consolidation", stop=short_stop_loss)
+    strategy.exit("Short TP1 Consolidation", "Short Consolidation", limit=basis, qty_percent=50, comment="Partial TP1")
+    strategy.exit("Short TP2 Consolidation", "Short Consolidation", limit=lower, qty_percent=50, comment="Partial TP2")
+if short_exit_consolidation
+    strategy.close("Short Consolidation")
+
+// // ----- Swing High and Swing Low Calculation -----
+// lookback = 50
+// highestPoint = highest(high, lookback)
+// lowestPoint = lowest(low, lookback)
+
+// // ----- Fibonacci Extension Levels Calculation -----
+// fib_618 = (highestPoint - lowestPoint) * 0.618
+// fib_1618 = (highestPoint - lowestPoint) * 1.618
+
+// // ----- Fibonacci Take Profit Levels Calculation -----
+// long_tp = lowestPoint + fib_1618
+// short_tp = highestPoint - fib_1618
+
+// // ----- Plot Fibonacci Take Profit Levels -----
+// plot(long_tp, title="Long TP (Fibonacci)", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_stepline)
+// plot(short_tp, title="Short TP (Fibonacci)", color=color.rgb(102, 76, 175), linewidth=2, style=plot.style_stepline)
+
+// // ----- Strategy Orders for Trend Mode -----
+// if long_entry_trend
+//     strategy.entry("Long Trend", strategy.long, comment="Trend")
+//     strategy.exit("Long Stop Loss Trend", "Long Trend", stop=long_stop_loss)
+//     strategy.order("Long TP Trend", strategy.long, when=close >= long_tp, limit=long_tp)
+// if long_exit_trend
+//     strategy.close("Long Trend")
+// if short_entry_trend
+//     strategy.entry("Short Trend", strategy.short, comment="Trend")
+//     strategy.exit("Short Stop Loss Trend", "Short Trend", stop=short_stop_loss)
+//     strategy.order("Short TP Trend", strategy.short, when=close <= short_tp, limit=short_tp)
+// if short_exit_trend
+//     strategy.close("Short Trend")
