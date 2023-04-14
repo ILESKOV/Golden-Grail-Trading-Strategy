@@ -1,0 +1,1 @@
+Golded grail trading strategy
