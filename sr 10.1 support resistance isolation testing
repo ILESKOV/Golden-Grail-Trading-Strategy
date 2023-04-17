@@ -1,0 +1,22 @@
+//@version=4
+study("Support and Resistance", shorttitle="SR", overlay=true)
+
+// Input parameters
+length = input(5, title="Lookback Length", type=input.integer, minval=1)
+
+// Function to check for swing highs and swing lows
+isSwingHigh(src, lookBack) =>
+    highestbars = highestbars(src, lookBack)
+    highestbars == 0 and src[1] > src[2]
+
+isSwingLow(src, lookBack) =>
+    lowestbars = lowestbars(src, lookBack)
+    lowestbars == 0 and src[1] < src[2]
+
+// Find swing highs and lows
+swingHigh = isSwingHigh(high, length) ? high[1] : na
+swingLow = isSwingLow(low, length) ? low[1] : na
+
+// Plot support and resistance lines
+plot(swingHigh, color=color.red, linewidth=1, style=plot.style_line, trackprice=true, offset=-9999)
+plot(swingLow, color=color.green, linewidth=1, style=plot.style_line, trackprice=true, offset=-9999)
