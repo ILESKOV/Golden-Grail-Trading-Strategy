@@ -1,0 +1,67 @@
+//@version=4
+strategy("Custom Strategy", overlay=true)
+
+// --- Inputs from the three indicators
+// LinReg Candles
+signal_length = input(11, title="Signal Smoothing")
+linreg_length = input(11, title="Linear Regression Length")
+
+// UT Bot Alerts
+ut_a = input(2, title = "UT Key Vaule. 'This changes the sensitivity'")
+ut_c = input(11, title = "UT ATR Period")
+ut_h = input(false, title = "UT Signals from Heikin Ashi Candles")
+
+// STC better MACD
+stc_length = input(12, 'STC Length')
+stc_fastLength = input(26, 'STC FastLength')
+stc_slowLength = input(50, 'STC SlowLength')
+
+// Date border input
+start_date = input(defval=timestamp("2023-04-15T00:00:00"), title="Start Date", type=input.time)
+end_date = input(defval=timestamp("2023-04-16T23:59:59"), title="End Date", type=input.time)
+
+// --- Indicator calculations
+// LinReg Candles
+bopen = linreg(open, linreg_length, 0)
+bhigh = linreg(high, linreg_length, 0)
+blow = linreg(low, linreg_length, 0)
+bclose = linreg(close, linreg_length, 0)
+signal = sma(bclose, signal_length)
+
+// UT Bot Alerts
+xATR = atr(ut_c)
+nLoss = ut_a * xATR
+src = ut_h ? security(heikinashi(syminfo.tickerid), timeframe.period, close, lookahead = false) : close
+
+xATRTrailingStop = 0.0
+xATRTrailingStop := iff(src > nz(xATRTrailingStop[1], 0) and src[1] > nz(xATRTrailingStop[1], 0), max(nz(xATRTrailingStop[1]), src - nLoss),
+   iff(src < nz(xATRTrailingStop[1], 0) and src[1] < nz(xATRTrailingStop[1], 0), min(nz(xATRTrailingStop[1]), src + nLoss), src - nLoss))
+
+above = src > xATRTrailingStop
+below = src < xATRTrailingStop
+
+// STC better MACD
+stc_delta(MA, fastLength, slowLength) => MA == "EMA" ? ema(close, fastLength) - ema(close, slowLength) : sma(close, fastLength) - sma(close, slowLength)
+
+fast_stc = stc_delta("EMA", stc_fastLength, stc_slowLength)
+slow_stc = stc_delta("EMA", stc_length, stc_slowLength)
+stc_q = fast_stc - slow_stc
+mAAAAA = sma(stc_q, 5)
+mColor = mAAAAA > mAAAAA[1] ? color.green : color.red
+
+// --- Plotting
+
+// Plot Linear Regression Candles
+r = bopen < bclose
+plotcandle(r ? bopen : na, r ? bhigh : na, r ? blow: na, r ? bclose : na, title="LinReg Candles", color= color.green, wickcolor=color.green, bordercolor=color.green)
+plotcandle(r ? na : bopen, r ? na : bhigh, r ? na : blow, r ? na : bclose, title="LinReg Candles", color=color.red, wickcolor=color.red, bordercolor=color.red)
+
+// Plot UT Bot Alerts
+barcolor(above ? color.green : na)
+barcolor(below ? color.red : na)
+
+// Plot STC better MACD
+plot(mAAAAA, color=mColor, title='STC', linewidth=2)
+
+// Date border
+bgcolor(time >= start_date and time <= end_date ? color.yellow : na, transp=85)
