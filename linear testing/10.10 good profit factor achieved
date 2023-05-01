@@ -1,0 +1,134 @@
+//@version=4
+strategy("Combined Strategy", shorttitle="CS", overlay=true)
+
+// Initial Capital and Risk per Trade
+initialCapital = 1000
+riskPerTrade = 0.01
+
+// Fees
+maker_fee_usdt = 0.00020
+taker_fee_usdt = 0.00040
+maker_fee_usdt_bnb = 0.00018
+taker_fee_usdt_bnb = 0.00036
+
+maker_fee_busd = 0.00012
+taker_fee_busd = 0.00030
+maker_fee_busd_bnb = 0.000108
+taker_fee_busd_bnb = 0.00027
+
+// Inputs
+signal_length = input(11, title="Signal Smoothing", type=input.integer, minval=1, maxval=200)
+sma_signal = input(true, title="Simple MA (Signal Line)", type=input.bool)
+lin_reg = input(true, title="Lin Reg", type=input.bool)
+linreg_length = input(11, title="Linear Regression Length", type=input.integer, minval=1, maxval=200)
+start_date = input(defval=timestamp("2023-04-15T00:00:00"), title="Start Date", type=input.time)
+end_date = input(defval=timestamp("2023-04-16T23:59:59"), title="End Date", type=input.time)
+
+a = input(2, title="Key Value. 'This changes the sensitivity'")
+a_tp = input(3, title="Key Value for Take Profit. 'This changes the sensitivity'")
+c = input(11, title="ATR Period")
+h = input(false, title="Signals from Heikin Ashi Candles")
+
+EEEEEE = input(12, title='Length')
+BBBB = input(26, title='FastLength')
+BBBBB = input(50, title='SlowLength')
+
+// Linear Regression Candles
+bopen = lin_reg ? linreg(open, linreg_length, 0) : open
+bhigh = lin_reg ? linreg(high, linreg_length, 0) : high
+blow = lin_reg ? linreg(low, linreg_length, 0) : low
+bclose = lin_reg ? linreg(close, linreg_length, 0) : close
+
+r = bopen < bclose
+
+signal = sma_signal ? sma(bclose, signal_length) : ema(bclose, signal_length)
+
+// UT Bot Alerts
+xATR = atr(c)
+nLoss = a * xATR
+nLoss_tp = a_tp * xATR
+src = h ? security(heikinashi(syminfo.tickerid), timeframe.period, close, lookahead=false) : close
+
+xATRTrailingStop = 0.0
+xATRTrailingStop := iff(src > nz(xATRTrailingStop[1], 0) and src[1] > nz(xATRTrailingStop[1], 0), max(nz(xATRTrailingStop[1]), src - nLoss),
+   iff(src < nz(xATRTrailingStop[1], 0) and src[1] < nz(xATRTrailingStop[1], 0), min(nz(xATRTrailingStop[1]), src + nLoss), 
+   iff(src > nz(xATRTrailingStop[1], 0), src - nLoss, src + nLoss)))
+
+pos = 0   
+pos :=	iff(src[1] < nz(xATRTrailingStop[1], 0) and src > nz(xATRTrailingStop[1], 0), 1,
+   iff(src[1] > nz(xATRTrailingStop[1], 0) and src < nz(xATRTrailingStop[1], 0), -1, nz(pos[1], 0))) 
+
+ema_src = ema(src,1)
+above = crossover(ema_src, xATRTrailingStop)
+below = crossover(xATRTrailingStop, ema_src)
+
+ut_buy = src > xATRTrailingStop and above 
+ut_sell = src < xATRTrailingStop and below
+
+// Calculate position size
+positionSize(_nLoss) =>
+    initialCapital * riskPerTrade / (_nLoss + taker_fee_usdt_bnb * initialCapital) // Choose the appropriate fee variable
+
+
+// STC
+AAAA(BBB, BBBB, BBBBB) =>
+    fastMA = ema(BBB, BBBB)
+    slowMA = ema(BBB, BBBBB)
+    AAAA = fastMA - slowMA
+    AAAA
+
+AAAAA(EEEEEE, BBBB, BBBBB) =>
+    AAA = input(0.5)
+    var CCCCC = 0.0
+    var DDD = 0.0
+    var DDDDDD = 0.0
+    var EEEEE = 0.0
+    BBBBBB = AAAA(close, BBBB, BBBBB)
+    CCC = lowest(BBBBBB, EEEEEE)
+    CCCC = highest(BBBBBB, EEEEEE) - CCC
+    CCCCC := CCCC > 0 ? (BBBBBB - CCC) / CCCC * 100 : nz(CCCCC[1])
+    DDD := na(DDD[1]) ? CCCCC : DDD[1] + AAA * (CCCCC - DDD[1])
+    DDDD = lowest(DDD, EEEEEE)
+    DDDDD = highest(DDD, EEEEEE) - DDDD
+    DDDDDD := DDDDD > 0 ? (DDD - DDDD) / DDDDD * 100 : nz(DDDDDD[1])
+    EEEEE := na(EEEEE[1]) ? DDDDDD : EEEEE[1] + AAA * (DDDDDD - EEEEE[1])
+    EEEEE
+
+mAAAAA = AAAAA(EEEEEE, BBBB, BBBBB)
+stc_green = mAAAAA > mAAAAA[1]
+
+// Entry and Exit Conditions
+longCondition = ut_buy and r and stc_green
+shortCondition = ut_sell and not r and not stc_green
+
+pos_size = positionSize(nLoss)
+
+within_date_range = (time >= start_date) and (time <= end_date)
+
+// Plot Linear Regression
+plotcandle(r ? bopen : na, r ? bhigh : na, r ? blow: na, r ? bclose : na, title="LinReg Candles", color= color.green, wickcolor=color.green, bordercolor=color.green)
+plotcandle(r ? na : bopen, r ? na : bhigh, r ? na : blow, r ? na : bclose, title="LinReg Candles", color=color.red, wickcolor=color.red, bordercolor=color.red)
+plot(signal, color=color.white)
+
+// Plot UT
+plotshape(ut_buy, title="Buy", text="Buy", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, transp=0, size=size.tiny)
+plotshape(ut_sell, title="Sell", text="Sell", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, transp=0, size=size.tiny)
+
+barcolor(ut_buy ? color.green : na)
+barcolor(ut_sell ? color.red : na)
+
+// Plot STC
+stc_color = mAAAAA > mAAAAA[1] ? color.new(color.green, 20) : color.new(color.red, 20)
+plot(mAAAAA, color=stc_color, title='STC', linewidth=2)
+ul = plot(25, color=color.new(color.gray, 70))
+ll = plot(75, color=color.new(color.gray, 70))
+fill(ul, ll, color=color.new(color.gray, 96))
+
+if (longCondition and within_date_range)
+    strategy.entry("Long", strategy.long, qty=pos_size)
+    strategy.exit("Exit Long", "Long", stop=signal - nLoss - taker_fee_usdt_bnb * initialCapital, trail_points=nLoss_tp, when=bopen > bclose)
+
+if (shortCondition and within_date_range)
+    strategy.entry("Short", strategy.short, qty=pos_size)
+    strategy.exit("Exit Short", "Short", stop=signal + nLoss + taker_fee_usdt_bnb * initialCapital, trail_points=nLoss_tp, when=bopen < bclose)
+
