@@ -1,0 +1,78 @@
+//@version=4
+strategy("Bollinger Bands with ATR, RSI, and MA Cross", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+length = input(20, title="Length")
+mult = input(2.0, title="StdDev Multiplication")
+atrLength = input(14, title="ATR Length")
+atrMult = input(0.8, title="ATR Multiplication",type=input.float)
+rsiLength = input(14, title="RSI Length")
+rsiOversold = input(30, title="RSI Oversold Level")
+rsiOverbought = input(70, title="RSI Overbought Level")
+stopLossMult = input(1.5, title="Stop Loss ATR Multiplier")
+
+// Define Moving Average lengths for cross-over system
+shortMALength = input(9, title="Short MA Length")
+longMALength = input(21, title="Long MA Length")
+
+// Moving Averages
+shortMA = sma(close, shortMALength)
+longMA = sma(close, longMALength)
+
+// Bollinger Bands
+basis = sma(close, length)
+dev = mult * stdev(close, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Average True Range
+atr = atr(atrLength)
+
+// Define consolidation - if ATR is low enough
+consolidation = atr < atrMult
+
+// Relative Strength Index
+rsi = rsi(close, rsiLength)
+
+var float stopLossLevel = na
+var bool partProfitTakenLong = na
+var bool partProfitTakenShort = na
+
+// Entry conditions
+longCondition = consolidation and close <= lowerBB and rsi > rsiOversold and rsi < rsiOverbought and crossover(shortMA, longMA)
+if (longCondition)
+    entryPrice = close - atr * stopLossMult
+    stopLossLevel := close - atr * stopLossMult * 3
+    partProfitTakenLong := false
+    strategy.entry("Buy", strategy.long, limit=entryPrice)
+
+shortCondition = consolidation and close >= upperBB and rsi > rsiOversold and rsi < rsiOverbought and crossover(longMA, shortMA)
+if (shortCondition)
+    entryPrice = close + atr * stopLossMult
+    stopLossLevel := close + atr * stopLossMult * 3
+    partProfitTakenShort := false
+    strategy.entry("Sell", strategy.short, limit=entryPrice)
+
+// Take profit conditions
+if (strategy.position_size > 0 and high >= basis and partProfitTakenLong == false)
+    strategy.close("Buy", qty_percent = 50)
+    partProfitTakenLong := true
+else if (strategy.position_size < 0 and low <= basis and partProfitTakenShort == false)
+    strategy.close("Sell", qty_percent = 50)
+    partProfitTakenShort := true
+            
+// Stop Loss conditions
+if (na(stopLossLevel) == false)
+    if (strategy.position_size > 0 and low < stopLossLevel)
+        strategy.close("Buy")
+        partProfitTakenLong := false
+    else if (strategy.position_size < 0 and high > stopLossLevel)
+        strategy.close("Sell")
+        partProfitTakenShort := false
+
+// Plotting
+plot(basis, "Basis", color=color.blue)
+p1 = plot(upperBB, "Upper BB", color=color.green)
+p2 = plot(lowerBB, "Lower BB", color=color.red)
+plot(shortMA, "Short MA", color=color.yellow)
+plot(longMA, "Long MA", color=color.orange)
+fill(p1, p2, color=color.rgb(255, 255, 255, 90))
