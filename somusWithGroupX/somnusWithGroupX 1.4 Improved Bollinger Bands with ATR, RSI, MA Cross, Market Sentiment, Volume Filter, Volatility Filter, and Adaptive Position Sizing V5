@@ -1,0 +1,109 @@
+//@version=4
+strategy("Improved Bollinger Bands with ATR, RSI, MA Cross, Market Sentiment, Volume Filter, Volatility Filter, and Adaptive Position Sizing V5", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+length = input(20, title="Length")
+mult = input(2.0, title="StdDev Multiplication")
+atrLength = input(14, title="ATR Length")
+atrMult = input(0.8, title="ATR Multiplication",type=input.float)
+rsiLength = input(14, title="RSI Length")
+rsiOversold = input(30, title="RSI Oversold Level")
+rsiOverbought = input(70, title="RSI Overbought Level")
+stopLossMult = input(1.5, title="Stop Loss ATR Multiplier")
+volumeMult = input(2.0, title="Volume Multiplication")
+
+// Define Moving Average lengths for cross-over system
+shortMALength = input(9, title="Short MA Length")
+longMALength = input(21, title="Long MA Length")
+
+// Moving Averages
+shortMA = sma(close, shortMALength)
+longMA = sma(close, longMALength)
+
+// Bollinger Bands
+basis = sma(close, length)
+dev = mult * stdev(close, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Average True Range
+atr = atr(atrLength)
+
+// Define consolidation - if ATR is low enough
+consolidation = atr < atrMult
+
+// Relative Strength Index
+rsi = rsi(close, rsiLength)
+
+// Define long bias as short MA being above long MA
+longBias = crossover(shortMA, longMA)
+
+// Define short bias as short MA being below long MA
+shortBias = crossover(longMA, shortMA)
+
+// Define Volume condition
+highVolume = volume > sma(volume, length) * volumeMult
+
+// Volatility filtering
+volatility = atr / sma(atr, length)
+lowVolatility = volatility < 1
+highVolatility = volatility > 1
+
+var float stopLossLevel = na
+var bool partProfitTakenLong = na
+var bool partProfitTakenShort = na
+
+var float entryPriceLong = na
+var float entryPriceShort = na
+
+// Adaptive position sizing
+positionSize = strategy.equity / close * (highVolatility ? 0.01 : 0.02)
+
+// Entry conditions - added bias check, high volume check, and volatility filter
+longCondition = close <= lowerBB and rsi > rsiOversold and rsi < rsiOverbought and longBias and highVolume and lowVolatility
+if (longCondition)
+    entryPriceLong := close
+    stopLossLevel := close - atr * stopLossMult * 3
+    partProfitTakenLong := false
+    strategy.entry("Buy", strategy.long, qty = positionSize)
+
+shortCondition = close >= upperBB and rsi > rsiOversold and rsi < rsiOverbought and shortBias and highVolume and lowVolatility
+if (shortCondition)
+    entryPriceShort := close
+    stopLossLevel := close + atr * stopLossMult * 3
+    partProfitTakenShort := false
+    strategy.entry("Sell", strategy.short, qty = positionSize)
+
+// Trailing Stop Loss for long position
+if (na(entryPriceLong) == false)
+    if (strategy.position_size > 0)
+        stopLossLevel := max(stopLossLevel, high - atr * stopLossMult * 3)
+
+// Trailing Stop Loss for short position
+if (na(entryPriceShort) == false)
+    if (strategy.position_size < 0)
+        stopLossLevel := min(stopLossLevel, low + atr * stopLossMult * 3)
+
+// Take profit conditions - take profit at middle Bollinger Band, or at MA cross in opposite direction
+if (strategy.position_size > 0 and (high >= basis or crossover(longMA, shortMA)) and partProfitTakenLong == false)
+    strategy.close("Buy", qty_percent = 50)
+    partProfitTakenLong := true
+else if (strategy.position_size < 0 and (low <= basis or crossover(shortMA, longMA)) and partProfitTakenShort == false)
+    strategy.close("Sell", qty_percent = 50)
+    partProfitTakenShort := true
+            
+// Stop Loss conditions - stop loss at 3 * ATR from entry price or at MA cross in opposite direction
+if (na(stopLossLevel) == false)
+    if (strategy.position_size > 0 and (low < stopLossLevel or crossover(longMA, shortMA)))
+        strategy.close("Buy")
+        partProfitTakenLong := false
+    else if (strategy.position_size < 0 and (high > stopLossLevel or crossover(shortMA, longMA)))
+        strategy.close("Sell")
+        partProfitTakenShort := false
+
+// Plotting
+plot(basis, "Basis", color=color.blue)
+p1 = plot(upperBB, "Upper BB", color=color.green)
+p2 = plot(lowerBB, "Lower BB", color=color.red)
+plot(shortMA, "Short MA", color=color.yellow)
+plot(longMA, "Long MA", color=color.orange)
+fill(p1, p2, color=color.rgb(255, 255, 255, 90))
