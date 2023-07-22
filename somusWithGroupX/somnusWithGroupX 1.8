@@ -1,0 +1,35 @@
+//@version=4
+strategy("RSI Strategy - Version 2", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+rsiLength = input(14, title="RSI Length")
+rsiOversold = input(30, title="RSI Oversold Level")
+rsiOverbought = input(70, title="RSI Overbought Level")
+
+src = close
+rsi = rsi(src, rsiLength)
+
+// Position size
+positionSize = 100 // adjust as per your risk preference
+
+// Entry conditions
+longCondition = crossover(rsi, rsiOversold)
+if (longCondition)
+    strategy.entry("Buy", strategy.long, qty = positionSize)
+
+shortCondition = crossunder(rsi, rsiOverbought)
+if (shortCondition)
+    strategy.entry("Sell", strategy.short, qty = positionSize)
+
+// Exit conditions
+longExit = crossunder(rsi, rsiOverbought)
+if (longExit)
+    strategy.close("Buy")
+
+shortExit = crossover(rsi, rsiOversold)
+if (shortExit)
+    strategy.close("Sell")
+
+// Plotting
+plot(rsi, "RSI", color=color.blue)
+hline(rsiOverbought, "Overbought Level", color=color.red)
+hline(rsiOversold, "Oversold Level", color=color.green)
