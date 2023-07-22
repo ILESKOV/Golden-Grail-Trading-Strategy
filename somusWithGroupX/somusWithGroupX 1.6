@@ -1,0 +1,47 @@
+//@version=4
+strategy("Simplified Bollinger Bands with RSI and MA Cross Strategy", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+length = input(20, title="Length")
+mult = input(2.0, title="StdDev Multiplication")
+rsiLength = input(14, title="RSI Length")
+rsiOversold = input(20, title="RSI Oversold Level") // Adjusted
+rsiOverbought = input(80, title="RSI Overbought Level") // Adjusted
+stopLossMult = input(1.5, title="Stop Loss ATR Multiplier")
+shortMALength = input(9, title="Short MA Length")
+longMALength = input(21, title="Long MA Length")
+
+// Calculations
+src = close
+basis = sma(src, length)
+dev = mult * stdev(src, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Calculate RSI
+rsi = rsi(src, rsiLength)
+
+// Moving averages
+shortMA = sma(close, shortMALength)
+longMA = sma(close, longMALength)
+
+// Position size
+positionSize = 100 // adjust as per your risk preference
+
+// Entry conditions
+longCondition = crossover(shortMA, longMA) and low <= lowerBB and rsi > rsiOversold
+if (longCondition)
+    strategy.entry("Buy", strategy.long, qty = positionSize)
+
+shortCondition = crossunder(shortMA, longMA) and high >= upperBB and rsi < rsiOverbought
+if (shortCondition)
+    strategy.entry("Sell", strategy.short, qty = positionSize)
+
+// Stop Loss conditions - stop loss at 1.5 * ATR from entry price or at MA cross in opposite direction
+strategy.exit("exit", "Buy", stop=low - atr(length) * stopLossMult)
+strategy.exit("exit", "Sell", stop=high + atr(length) * stopLossMult)
+
+// Plotting
+plot(upperBB, "Upper BB", color=color.green)
+plot(lowerBB, "Lower BB", color=color.red)
+plot(shortMA, "Short MA", color=color.yellow)
+plot(longMA, "Long MA", color=color.orange)
