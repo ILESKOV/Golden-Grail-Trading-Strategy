@@ -1,0 +1,32 @@
+//@version=4
+strategy("Bollinger Bands with RSI V1", overlay=true, initial_capital=1000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+length = input(20, title="Length")
+mult = input(2.0, title="StdDev Multiplication")
+rsiLength = input(14, title="RSI Length")
+rsiOversold = input(30, title="RSI Oversold Level")
+rsiOverbought = input(70, title="RSI Overbought Level")
+
+// Bollinger Bands
+basis = sma(close, length)
+dev = mult * stdev(close, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Relative Strength Index
+rsi = rsi(close, rsiLength)
+
+// Entry conditions
+longCondition = close <= lowerBB and rsi < rsiOversold
+if (longCondition)
+    strategy.entry("Buy", strategy.long)
+
+shortCondition = close >= upperBB and rsi > rsiOverbought
+if (shortCondition)
+    strategy.entry("Sell", strategy.short)
+
+// Plotting
+plot(basis, "Basis", color=color.blue)
+p1 = plot(upperBB, "Upper BB", color=color.green)
+p2 = plot(lowerBB, "Lower BB", color=color.red)
+fill(p1, p2, color=color.rgb(255, 255, 255, 90))
