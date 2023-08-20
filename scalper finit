@@ -1,0 +1,57 @@
+//@version=4
+strategy("Configurable MACD Scalping Strategy with Fees", shorttitle="CMSS-Fees", overlay=true, initial_capital=1000)
+
+// MACD Settings
+fastLength = input(12, title="MACD Fast Length")
+slowLength = input(26, title="MACD Slow Length")
+signalLength = input(9, title="MACD Signal Length")
+
+[macdLine, signalLine, _] = macd(close, fastLength, slowLength, signalLength)
+
+// RSI Settings and Filter
+rsiLength = input(14, title="RSI Length")
+rsiOverbought = input(60, title="RSI Overbought Threshold")
+rsiOversold = input(40, title="RSI Oversold Threshold")
+rsiValue = rsi(close, rsiLength)
+
+// Backtesting date range
+startYear = input(defval=2023, title="Start Year")
+startMonth = input(defval=8, title="Start Month")
+startDay = input(defval=10, title="Start Day")
+endYear = input(defval=2023, title="End Year")
+endMonth = input(defval=8, title="End Month")
+endDay = input(defval=17, title="End Day")
+
+inDateRange = time >= timestamp(startYear, startMonth, startDay, 00, 00) and 
+              time <= timestamp(endYear, endMonth, endDay, 23, 59)
+
+// Entry Conditions
+longCondition = crossover(macdLine, signalLine) and rsiValue < rsiOversold and inDateRange
+shortCondition = crossunder(macdLine, signalLine) and rsiValue > rsiOverbought and inDateRange
+
+// Stop Loss & Take Profit
+atrLength = input(14, title="ATR Length")
+multiplier = input(1.0, title="Multiplier")
+atrValue = atr(atrLength)
+longStopLoss = close - atrValue * multiplier
+longTakeProfit = close + 3 * atrValue * multiplier 
+shortStopLoss = close + atrValue * multiplier
+shortTakeProfit = close - 3 * atrValue * multiplier 
+
+// Calculate position size based on risk
+riskPercentage = 0.03
+capitalAtRisk = strategy.equity * riskPercentage
+longRiskPerShare = close - longStopLoss
+shortRiskPerShare = shortStopLoss - close
+longQty = capitalAtRisk / longRiskPerShare
+shortQty = capitalAtRisk / shortRiskPerShare
+
+if (longCondition)
+    strategy.entry("Long", strategy.long, qty=longQty, stop=longStopLoss, limit=longTakeProfit)
+    
+if (shortCondition)
+    strategy.entry("Short", strategy.short, qty=shortQty, stop=shortStopLoss, limit=shortTakeProfit)
+
+// Plotting Entry Points
+plotshape(series=longCondition, title="Long Entry", location=location.belowbar, color=color.green, style=shape.labelup, text="BUY")
+plotshape(series=shortCondition, title="Short Entry", location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL")
