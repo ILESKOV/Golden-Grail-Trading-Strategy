@@ -1,0 +1,60 @@
+//@version=4
+strategy("Configurable MACD Scalping Strategy with Bollinger Bands", shorttitle="CMSS-BB", overlay=true, initial_capital=1000)
+
+// MACD Settings
+fastLength = input(12, title="MACD Fast Length")
+slowLength = input(26, title="MACD Slow Length")
+signalLength = input(9, title="MACD Signal Length")
+[macdLine, signalLine, _] = macd(close, fastLength, slowLength, signalLength)
+
+// RSI Settings and Filter
+rsiLength = input(14, title="RSI Length")
+rsiOverbought = input(60, title="RSI Overbought Threshold")
+rsiOversold = input(40, title="RSI Oversold Threshold")
+rsiValue = rsi(close, rsiLength)
+
+// Bollinger Bands Settings
+lengthBB = input(20, title="Bollinger Bands Length")
+srcBB = close
+basisBB = sma(srcBB, lengthBB)
+dev = input(2.0, title="Bollinger Bands Deviation")
+upperBB = basisBB + dev * stdev(srcBB, lengthBB)
+lowerBB = basisBB - dev * stdev(srcBB, lengthBB)
+
+// Backtesting date range
+startYear = input(defval=2023, title="Start Year")
+startMonth = input(defval=8, title="Start Month")
+startDay = input(defval=10, title="Start Day")
+endYear = input(defval=2023, title="End Year")
+endMonth = input(defval=8, title="End Month")
+endDay = input(defval=17, title="End Day")
+inDateRange = time >= timestamp(startYear, startMonth, startDay, 00, 00) and 
+              time <= timestamp(endYear, endMonth, endDay, 23, 59)
+
+// Entry Conditions
+longCondition = crossover(macdLine, signalLine) and rsiValue < rsiOversold and inDateRange
+shortCondition = crossunder(macdLine, signalLine) and rsiValue > rsiOverbought and inDateRange
+
+// Calculate position size based on risk
+riskPercentage = 0.03
+capitalAtRisk = strategy.equity * riskPercentage
+longRiskPerShare = close - lowerBB
+shortRiskPerShare = upperBB - close
+longQty = capitalAtRisk / longRiskPerShare
+shortQty = capitalAtRisk / shortRiskPerShare
+
+// Визуализация точек входа, стоп-лосса и тейк-профита
+if (longCondition)
+    strategy.entry("Long", strategy.long, qty=longQty, stop=lowerBB, limit=upperBB)
+    line.new(x1=bar_index, y1=lowerBB, x2=bar_index + 10, y2=lowerBB, color=color.red, width=2) // Стоп-лосс
+    line.new(x1=bar_index, y1=upperBB, x2=bar_index + 10, y2=upperBB, color=color.green, width=2) // Тейк-профит
+    
+if (shortCondition)
+    strategy.entry("Short", strategy.short, qty=shortQty, stop=upperBB, limit=lowerBB)
+    line.new(x1=bar_index, y1=upperBB, x2=bar_index + 10, y2=upperBB, color=color.rgb(175, 76, 76), width=2) // Стоп-лосс
+    line.new(x1=bar_index, y1=lowerBB, x2=bar_index + 10, y2=lowerBB, color=color.rgb(82, 255, 99), width=2) // Тейк-профит
+
+// Визуализация Bollinger Bands на графике
+plot(upperBB, title="Upper Bollinger Band", color=color.blue)
+plot(lowerBB, title="Lower Bollinger Band", color=color.blue)
+plot(basisBB, title="Middle Bollinger Band", color=color.purple)
