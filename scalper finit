@@ -46,12 +46,14 @@ shortRiskPerShare = shortStopLoss - close
 longQty = capitalAtRisk / longRiskPerShare
 shortQty = capitalAtRisk / shortRiskPerShare
 
+// Визуализация точек входа, стоп-лосса и тейк-профита
 if (longCondition)
     strategy.entry("Long", strategy.long, qty=longQty, stop=longStopLoss, limit=longTakeProfit)
+    line.new(x1=bar_index, y1=longStopLoss, x2=bar_index + 10, y2=longStopLoss, color=color.red, width=2) // Стоп-лосс
+    line.new(x1=bar_index, y1=longTakeProfit, x2=bar_index + 10, y2=longTakeProfit, color=color.green, width=2) // Тейк-профит
     
 if (shortCondition)
     strategy.entry("Short", strategy.short, qty=shortQty, stop=shortStopLoss, limit=shortTakeProfit)
+    line.new(x1=bar_index, y1=shortStopLoss, x2=bar_index + 10, y2=shortStopLoss, color=color.rgb(175, 76, 76), width=2) // Стоп-лосс
+    line.new(x1=bar_index, y1=shortTakeProfit, x2=bar_index + 10, y2=shortTakeProfit, color=color.rgb(82, 255, 99), width=2) // Тейк-профит
 
-// Plotting Entry Points
-plotshape(series=longCondition, title="Long Entry", location=location.belowbar, color=color.green, style=shape.labelup, text="BUY")
-plotshape(series=shortCondition, title="Short Entry", location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL")
